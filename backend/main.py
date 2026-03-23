@@ -18,7 +18,7 @@ EXAMPLE_FILE = Path(__file__).parent.parent / "example.xlsx"
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-app = FastAPI(title="OPR SendMail API")
+app = FastAPI(title="批次郵件發送 API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,6 +53,31 @@ def get_mailpit_config():
         "smtp_tls": False,
         "from_addr": os.getenv("SMTP_FROM", os.getenv("SMTP_USER", "")),
     }
+
+
+EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+
+EXPECTED_COLS = ["Sales", "Attn", "E-mail", "Email CC", "Attachment", "Email Subject", "Email Content"]
+REQUIRED_COLS = ["E-mail", "Email Subject", "Email Content"]
+
+
+def validate_row(row: dict) -> list[str]:
+    errors = []
+    for col in REQUIRED_COLS:
+        if not row.get(col, "").strip():
+            errors.append(f"{col} 不可為空")
+    for field in ["E-mail", "Email CC"]:
+        val = row.get(field, "").strip()
+        if not val:
+            continue
+        from email_service import split_emails
+        for addr in split_emails(val):
+            if not EMAIL_RE.match(addr):
+                errors.append(f"{field} 格式錯誤：{addr}")
+    attachment = row.get("Attachment", "").strip()
+    if attachment and not (ATTACHMENTS_DIR / attachment).exists():
+        errors.append(f"找不到附件：{attachment}")
+    return errors
 
 
 def eval_concat(expr: str, row_values: list) -> str:
@@ -96,29 +121,35 @@ def resolve_cell(value, row_values: list) -> str:
     return val_str
 
 
-def parse_excel(file_bytes: bytes) -> list[dict]:
+def parse_excel(file_bytes: bytes) -> tuple[list[dict], list[list[str]]]:
     from io import BytesIO
-    # data_only=False so we can see formulas when cached values are missing
     wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
     ws = wb.active
 
-    expected_cols = ["Sales", "Attn", "E-mail", "Email CC", "Attachment", "Email Subject", "Email Content"]
-    rows = []
-
     all_rows = list(ws.iter_rows(values_only=False))
     if not all_rows:
-        return rows
+        return [], []
 
-    for row in all_rows[1:]:  # skip header
+    # Validate and map headers by name
+    header = [str(cell.value).strip() if cell.value else "" for cell in all_rows[0]]
+    missing = [col for col in EXPECTED_COLS if col not in header]
+    if missing:
+        raise ValueError(f"Excel 缺少欄位：{', '.join(missing)}")
+    col_map = {col: header.index(col) for col in EXPECTED_COLS}
+
+    rows, row_errors = [], []
+    for row in all_rows[1:]:
         raw_values = [cell.value for cell in row]
         if all(v is None for v in raw_values):
             continue
         record = {}
-        for j, col in enumerate(expected_cols):
-            cell_val = raw_values[j] if j < len(raw_values) else None
+        for col in EXPECTED_COLS:
+            idx = col_map[col]
+            cell_val = raw_values[idx] if idx < len(raw_values) else None
             record[col] = resolve_cell(cell_val, raw_values)
         rows.append(record)
-    return rows
+        row_errors.append(validate_row(record))
+    return rows, row_errors
 
 
 @app.get("/api/attachments")
@@ -147,7 +178,9 @@ async def upload_excel(file: UploadFile = File(...)):
 
     content = await file.read()
     try:
-        rows = parse_excel(content)
+        rows, row_errors = parse_excel(content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"解析 Excel 失敗: {str(e)}")
 
@@ -163,7 +196,7 @@ async def upload_excel(file: UploadFile = File(...)):
     conn.commit()
     conn.close()
 
-    return {"session_id": session_id, "filename": file.filename, "rows": rows}
+    return {"session_id": session_id, "filename": file.filename, "rows": rows, "row_errors": row_errors}
 
 
 class SendRequest(BaseModel):

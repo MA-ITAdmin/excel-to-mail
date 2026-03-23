@@ -5,7 +5,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OPR SendMail</title>
+  <title>批次郵件發送</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -170,6 +170,14 @@
     .badge-success { background: #e6f4ea; color: #137333; }
     .badge-error   { background: #fce8e6; color: #c5221f; }
     .badge-pending { background: #e8f0fe; color: #1967d2; }
+    .badge-warning { background: #fef7e0; color: #b45309; }
+
+    tr.row-invalid td { background: #fffbf0; }
+    tr.row-invalid:hover td { background: #fef3c7; }
+
+    .error-list { font-size: 0.75rem; color: #b45309; margin-top: 4px; white-space: normal; line-height: 1.5; }
+
+    input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: #1a73e8; }
 
     #progress-wrap { display: none; margin-top: 16px; }
     .progress-bar-bg {
@@ -217,7 +225,7 @@
   </style>
 </head>
 <body>
-  <header>✉ OPR SendMail</header>
+  <header>✉ 批次郵件發送</header>
   <main>
 
     <div class="card">
@@ -261,6 +269,14 @@
             <div class="lbl">總筆數</div>
           </div>
           <div class="stat">
+            <div class="val" id="stat-selected" style="color:#1a73e8">0</div>
+            <div class="lbl">已選取</div>
+          </div>
+          <div class="stat">
+            <div class="val" id="stat-warning" style="color:#b45309">0</div>
+            <div class="lbl">有問題</div>
+          </div>
+          <div class="stat">
             <div class="val" id="stat-success" style="color:#137333">0</div>
             <div class="lbl">已成功</div>
           </div>
@@ -271,6 +287,9 @@
         </div>
 
         <div class="action-bar">
+          <button class="btn btn-outline btn-sm" id="btn-select-all">全選</button>
+          <button class="btn btn-outline btn-sm" id="btn-select-none">取消全選</button>
+          <span style="width:1px;height:20px;background:#e0e0e0;display:inline-block;margin:0 4px;"></span>
           <button class="btn btn-outline" id="btn-send-test">🧪 發測試信</button>
           <button class="btn btn-danger" id="btn-send-official">📤 發正式信</button>
           <span id="filename-label" style="font-size:0.85rem;color:#888"></span>
@@ -288,6 +307,7 @@
           <table>
             <thead>
               <tr>
+                <th><input type="checkbox" id="check-all" title="全選/取消全選" /></th>
                 <th>#</th>
                 <th>Sales</th>
                 <th>Attn</th>
@@ -314,6 +334,8 @@
     let sessionId = null;
     let rows = [];
     let rowStatuses = [];
+    let rowErrors = [];
+    let rowChecked = [];
 
     // Attachments upload
     const attachZone = document.getElementById('attach-zone');
@@ -391,15 +413,22 @@
 
         sessionId = data.session_id;
         rows = data.rows;
+        rowErrors = data.row_errors || rows.map(() => []);
         rowStatuses = rows.map(() => 'pending');
+        rowChecked = rows.map((_, i) => rowErrors[i].length === 0);
 
+        const invalidCount = rowErrors.filter(e => e.length > 0).length;
         document.getElementById('filename-label').textContent = '📄 ' + data.filename;
         renderTable();
         document.getElementById('data-section').style.display = 'block';
         document.getElementById('progress-wrap').style.display = 'none';
         document.getElementById('result-summary').innerHTML = '';
         updateStats();
-        toast('成功載入 ' + rows.length + ' 筆資料', 'success');
+        if (invalidCount > 0) {
+          toast(`載入 ${rows.length} 筆，其中 ${invalidCount} 筆有問題（已預設取消選取）`, 'error');
+        } else {
+          toast('成功載入 ' + rows.length + ' 筆資料', 'success');
+        }
         uploadZone.innerHTML = '<div class="icon">✅</div><p><strong>已載入：</strong>' + esc(file.name) + '</p><p style="margin-top:6px;font-size:0.8rem;color:#999">點擊重新上傳</p>';
       } catch (err) {
         toast(err.message, 'error');
@@ -410,8 +439,17 @@
 
     function renderTable() {
       const tbody = document.getElementById('table-body');
-      tbody.innerHTML = rows.map((r, i) => `
-        <tr id="row-${i}">
+      tbody.innerHTML = rows.map((r, i) => {
+        const errs = rowErrors[i] || [];
+        const hasErr = errs.length > 0;
+        const checked = rowChecked[i] ? 'checked' : '';
+        const rowClass = hasErr ? 'row-invalid' : '';
+        const statusCell = hasErr
+          ? `<span class="status-badge badge-warning" title="${esc(errs.join('\n'))}">⚠ 有問題</span><div class="error-list">${errs.map(esc).join('<br>')}</div>`
+          : `<span class="status-badge badge-pending">待發送</span>`;
+        return `
+        <tr id="row-${i}" class="${rowClass}">
+          <td><input type="checkbox" class="row-check" data-idx="${i}" ${checked} /></td>
           <td>${i + 1}</td>
           <td title="${esc(r['Sales'])}">${esc(r['Sales'])}</td>
           <td title="${esc(r['Attn'])}">${esc(r['Attn'])}</td>
@@ -420,13 +458,14 @@
           <td title="${esc(r['Attachment'])}">${esc(r['Attachment'])}</td>
           <td title="${esc(r['Email Subject'])}">${esc(r['Email Subject'])}</td>
           <td title="${esc(r['Email Content'])}" style="max-width:180px">${esc(r['Email Content']).substring(0,50)}${r['Email Content'].length>50?'…':''}</td>
-          <td id="status-${i}"><span class="status-badge badge-pending">待發送</span></td>
+          <td id="status-${i}">${statusCell}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-outline btn-sm" data-idx="${i}" data-type="test">測試</button>
             <button class="btn btn-danger btn-sm" style="margin-left:4px" data-idx="${i}" data-type="official">發送</button>
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
+      document.getElementById('check-all').checked = rowChecked.every(Boolean);
     }
 
     function updateRowStatus(i, status, msg) {
@@ -444,6 +483,9 @@
     }
 
     function updateStats() {
+      document.getElementById('stat-total').textContent = rows.length;
+      document.getElementById('stat-selected').textContent = rowChecked.filter(Boolean).length;
+      document.getElementById('stat-warning').textContent = rowErrors.filter(e => e.length > 0).length;
       document.getElementById('stat-success').textContent = rowStatuses.filter(s => s === 'success').length;
       document.getElementById('stat-error').textContent = rowStatuses.filter(s => s === 'error').length;
     }
@@ -469,8 +511,10 @@
 
     async function sendAll(type) {
       if (!sessionId || !rows.length) return;
+      const selected = rows.reduce((acc, _, i) => rowChecked[i] ? [...acc, i] : acc, []);
+      if (!selected.length) { toast('請先選取至少一列', 'error'); return; }
       if (type === 'official') {
-        if (!confirm('確定要發送正式信件給所有 ' + rows.length + ' 位收件人嗎？此操作無法復原。')) return;
+        if (!confirm(`確定要發送正式信件給已選取的 ${selected.length} 位收件人嗎？此操作無法復原。`)) return;
       }
 
       document.getElementById('btn-send-test').disabled = true;
@@ -480,9 +524,10 @@
       document.getElementById('result-summary').innerHTML = '';
 
       let success = 0, error = 0;
-      for (let i = 0; i < rows.length; i++) {
-        document.getElementById('progress-label').textContent = '發送中 ' + (i+1) + ' / ' + rows.length;
-        document.getElementById('progress-bar').style.width = ((i+1)/rows.length*100).toFixed(0) + '%';
+      for (let n = 0; n < selected.length; n++) {
+        const i = selected[n];
+        document.getElementById('progress-label').textContent = '發送中 ' + (n+1) + ' / ' + selected.length;
+        document.getElementById('progress-bar').style.width = ((n+1)/selected.length*100).toFixed(0) + '%';
         updateRowStatus(i, 'sending');
 
         try {
@@ -513,6 +558,34 @@
 
     document.getElementById('btn-send-test').addEventListener('click', () => sendAll('test'));
     document.getElementById('btn-send-official').addEventListener('click', () => sendAll('official'));
+
+    document.getElementById('btn-select-all').addEventListener('click', () => {
+      rowChecked = rowChecked.map(() => true);
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = true);
+      document.getElementById('check-all').checked = true;
+      updateStats();
+    });
+
+    document.getElementById('btn-select-none').addEventListener('click', () => {
+      rowChecked = rowChecked.map(() => false);
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+      document.getElementById('check-all').checked = false;
+      updateStats();
+    });
+
+    document.getElementById('check-all').addEventListener('change', e => {
+      rowChecked = rowChecked.map(() => e.target.checked);
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
+      updateStats();
+    });
+
+    document.getElementById('table-body').addEventListener('change', e => {
+      const cb = e.target.closest('.row-check');
+      if (!cb) return;
+      rowChecked[parseInt(cb.dataset.idx)] = cb.checked;
+      document.getElementById('check-all').checked = rowChecked.every(Boolean);
+      updateStats();
+    });
 
     document.getElementById('table-body').addEventListener('click', e => {
       const btn = e.target.closest('button[data-idx]');
