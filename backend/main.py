@@ -2,7 +2,6 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Optional
 
 import openpyxl
 from dotenv import load_dotenv
@@ -41,6 +40,17 @@ def get_smtp_config():
         "smtp_user": os.getenv("SMTP_USER", ""),
         "smtp_pass": os.getenv("SMTP_PASS", ""),
         "smtp_tls": os.getenv("SMTP_TLS", "true").lower() == "true",
+        "from_addr": os.getenv("SMTP_FROM", os.getenv("SMTP_USER", "")),
+    }
+
+
+def get_mailpit_config():
+    return {
+        "smtp_host": os.getenv("MAILPIT_HOST", "mailpit"),
+        "smtp_port": int(os.getenv("MAILPIT_PORT", "1025")),
+        "smtp_user": "",
+        "smtp_pass": "",
+        "smtp_tls": False,
         "from_addr": os.getenv("SMTP_FROM", os.getenv("SMTP_USER", "")),
     }
 
@@ -160,13 +170,11 @@ class SendRequest(BaseModel):
     session_id: int
     row_index: int
     send_type: str  # "test" or "official"
-    test_email: Optional[str] = None
 
 
 class SendAllRequest(BaseModel):
     session_id: int
     send_type: str  # "test" or "official"
-    test_email: Optional[str] = None
 
 
 @app.post("/api/send")
@@ -183,18 +191,13 @@ def send_one(req: SendRequest):
         raise HTTPException(status_code=400, detail="row_index 超出範圍")
 
     row = rows[req.row_index]
-    cfg = get_smtp_config()
+    cfg = get_mailpit_config() if req.send_type == "test" else get_smtp_config()
 
     subject = render_template(row["Email Subject"], row)
     body = render_template(row["Email Content"], row)
 
-    if req.send_type == "test":
-        test_addr = req.test_email or os.getenv("TEST_EMAIL", cfg["from_addr"])
-        to_addrs = [test_addr]
-        cc_addrs = []
-    else:
-        to_addrs = split_emails(row["E-mail"])
-        cc_addrs = split_emails(row["Email CC"])
+    to_addrs = split_emails(row["E-mail"])
+    cc_addrs = split_emails(row["Email CC"]) if req.send_type != "test" else []
 
     if not to_addrs:
         conn.execute(
@@ -258,20 +261,15 @@ def send_all(req: SendAllRequest):
         raise HTTPException(status_code=404, detail="Session 不存在")
 
     rows = json.loads(row_data["data"])
-    cfg = get_smtp_config()
+    cfg = get_mailpit_config() if req.send_type == "test" else get_smtp_config()
     results = []
 
     for i, row in enumerate(rows):
         subject = render_template(row["Email Subject"], row)
         body = render_template(row["Email Content"], row)
 
-        if req.send_type == "test":
-            test_addr = req.test_email or os.getenv("TEST_EMAIL", cfg["from_addr"])
-            to_addrs = [test_addr]
-            cc_addrs = []
-        else:
-            to_addrs = split_emails(row["E-mail"])
-            cc_addrs = split_emails(row["Email CC"])
+        to_addrs = split_emails(row["E-mail"])
+        cc_addrs = split_emails(row["Email CC"]) if req.send_type != "test" else []
 
         if not to_addrs:
             results.append({"row": i, "status": "error", "error": "收件人為空"})

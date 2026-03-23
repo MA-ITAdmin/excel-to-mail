@@ -21,3 +21,9 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+    restart: unless-stopped

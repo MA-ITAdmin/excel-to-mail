@@ -246,11 +246,9 @@
 
     <div class="card">
       <h2>設定</h2>
-      <div class="config-row">
-        <div class="field-group">
-          <label>測試收件信箱（發測試信時使用）</label>
-          <input type="email" id="test-email" placeholder="test@example.com" />
-        </div>
+      <p style="font-size:0.88rem;color:#555;">發測試信時，信件會透過 <strong>Mailpit</strong> 攔截，不會寄出至真實收件人。</p>
+      <div style="margin-top:12px;">
+        <a href="http://localhost:8025" target="_blank" class="btn btn-outline btn-sm">📬 開啟 Mailpit 查看測試信件</a>
       </div>
     </div>
 
@@ -452,14 +450,12 @@
 
     async function sendOne(idx, type) {
       if (!sessionId) return;
-      const testEmail = document.getElementById('test-email').value.trim();
-      if (type === 'test' && !testEmail) { toast('請先填寫測試收件信箱', 'error'); return; }
       updateRowStatus(idx, 'sending');
       try {
         const res = await fetch(`${API}/api/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, row_index: idx, send_type: type, test_email: testEmail || null })
+          body: JSON.stringify({ session_id: sessionId, row_index: idx, send_type: type })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '發送失敗');
@@ -473,8 +469,6 @@
 
     async function sendAll(type) {
       if (!sessionId || !rows.length) return;
-      const testEmail = document.getElementById('test-email').value.trim();
-      if (type === 'test' && !testEmail) { toast('請先填寫測試收件信箱', 'error'); return; }
       if (type === 'official') {
         if (!confirm('確定要發送正式信件給所有 ' + rows.length + ' 位收件人嗎？此操作無法復原。')) return;
       }
@@ -495,7 +489,7 @@
           const res = await fetch(`${API}/api/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, row_index: i, send_type: type, test_email: testEmail || null })
+            body: JSON.stringify({ session_id: sessionId, row_index: i, send_type: type })
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.detail || '失敗');
@@ -541,11 +535,6 @@
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    const saved = localStorage.getItem('opr_test_email');
-    if (saved) document.getElementById('test-email').value = saved;
-    document.getElementById('test-email').addEventListener('input', e => {
-      localStorage.setItem('opr_test_email', e.target.value);
-    });
-  </script>
+</script>
 </body>
 </html>
