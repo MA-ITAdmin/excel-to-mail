@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -11,6 +12,8 @@ from pydantic import BaseModel
 
 from database import get_db, init_db
 from email_service import render_template, send_email, split_emails
+
+ATTACHMENTS_DIR = Path(__file__).parent.parent / "attachments"
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -40,30 +43,89 @@ def get_smtp_config():
     }
 
 
+def eval_concat(expr: str, row_values: list) -> str:
+    """Evaluate Excel-style string concatenation: "text"&B2&"text" """
+    parts = re.split(r"&", expr)
+    result = []
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        # Quoted string literal "..."
+        m = re.match(r'^"(.*)"$', part, re.DOTALL)
+        if m:
+            result.append(m.group(1))
+            continue
+        # Cell reference like A2, B2, G10
+        m = re.match(r"^([A-Z]+)(\d+)$", part, re.IGNORECASE)
+        if m:
+            col_idx = ord(m.group(1).upper()[0]) - ord("A")
+            if 0 <= col_idx < len(row_values):
+                val = row_values[col_idx]
+                result.append(str(val) if val is not None else "")
+            continue
+        result.append(part)
+    return "".join(result)
+
+
+def resolve_cell(value, row_values: list) -> str:
+    """Return final string value for a cell, evaluating Excel formulas if needed."""
+    if value is None:
+        return ""
+    val_str = str(value).strip()
+    if not val_str:
+        return ""
+    # Actual formula starting with =
+    if val_str.startswith("="):
+        return eval_concat(val_str[1:], row_values)
+    # Formula-like text without = (e.g., cached value wasn't saved):  "text"&B2&"text"
+    if "&" in val_str and re.search(r"\b[A-Z]\d+\b", val_str):
+        return eval_concat(val_str, row_values)
+    return val_str
+
+
 def parse_excel(file_bytes: bytes) -> list[dict]:
     from io import BytesIO
-    wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
+    # data_only=False so we can see formulas when cached values are missing
+    wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=False)
     ws = wb.active
 
-    rows = []
-    headers = None
     expected_cols = ["Sales", "Attn", "E-mail", "Email CC", "Attachment", "Email Subject", "Email Content"]
+    rows = []
 
-    for i, row in enumerate(ws.iter_rows(values_only=True)):
-        if i == 0:
-            headers = [str(c).strip() if c else "" for c in row]
-            continue
-        if all(c is None for c in row):
+    all_rows = list(ws.iter_rows(values_only=False))
+    if not all_rows:
+        return rows
+
+    for row in all_rows[1:]:  # skip header
+        raw_values = [cell.value for cell in row]
+        if all(v is None for v in raw_values):
             continue
         record = {}
         for j, col in enumerate(expected_cols):
-            if j < len(row):
-                val = row[j]
-                record[col] = str(val).strip() if val is not None else ""
-            else:
-                record[col] = ""
+            cell_val = raw_values[j] if j < len(raw_values) else None
+            record[col] = resolve_cell(cell_val, raw_values)
         rows.append(record)
     return rows
+
+
+@app.get("/api/attachments")
+def list_attachments():
+    ATTACHMENTS_DIR.mkdir(exist_ok=True)
+    files = [f.name for f in ATTACHMENTS_DIR.iterdir() if f.is_file() and not f.name.startswith(".")]
+    return {"files": sorted(files)}
+
+
+@app.post("/api/attachments")
+async def upload_attachments(files: list[UploadFile] = File(...)):
+    ATTACHMENTS_DIR.mkdir(exist_ok=True)
+    saved = []
+    for file in files:
+        dest = ATTACHMENTS_DIR / file.filename
+        content = await file.read()
+        dest.write_bytes(content)
+        saved.append(file.filename)
+    return {"saved": saved}
 
 
 @app.post("/api/upload")
@@ -141,6 +203,16 @@ def send_one(req: SendRequest):
         conn.close()
         raise HTTPException(status_code=400, detail="收件人 E-mail 為空")
 
+    attachment_filename = row["Attachment"] or None
+    if attachment_filename and not (ATTACHMENTS_DIR / attachment_filename).exists():
+        conn.execute(
+            "INSERT INTO send_logs (session_id, row_index, send_type, to_email, subject, status, error) VALUES (?,?,?,?,?,?,?)",
+            (req.session_id, req.row_index, req.send_type, ",".join(to_addrs), subject, "error", f"找不到附件：{attachment_filename}"),
+        )
+        conn.commit()
+        conn.close()
+        raise HTTPException(status_code=400, detail=f"找不到附件：{attachment_filename}")
+
     try:
         send_email(
             smtp_host=cfg["smtp_host"],
@@ -153,7 +225,7 @@ def send_one(req: SendRequest):
             cc_addrs=cc_addrs,
             subject=subject,
             body=body,
-            attachment_filename=row["Attachment"] or None,
+            attachment_filename=attachment_filename,
         )
         status = "success"
         error = None
@@ -203,6 +275,16 @@ def send_all(req: SendAllRequest):
             results.append({"row": i, "status": "error", "error": "收件人為空"})
             continue
 
+        attachment_filename = row["Attachment"] or None
+        if attachment_filename and not (ATTACHMENTS_DIR / attachment_filename).exists():
+            err_msg = f"找不到附件：{attachment_filename}"
+            conn.execute(
+                "INSERT INTO send_logs (session_id, row_index, send_type, to_email, cc_email, subject, status, error) VALUES (?,?,?,?,?,?,?,?)",
+                (req.session_id, i, req.send_type, ",".join(to_addrs), ",".join(cc_addrs), subject, "error", err_msg),
+            )
+            results.append({"row": i, "status": "error", "error": err_msg})
+            continue
+
         try:
             send_email(
                 smtp_host=cfg["smtp_host"],
@@ -215,7 +297,7 @@ def send_all(req: SendAllRequest):
                 cc_addrs=cc_addrs,
                 subject=subject,
                 body=body,
-                attachment_filename=row["Attachment"] or None,
+                attachment_filename=attachment_filename,
             )
             status = "success"
             error = None

@@ -70,11 +70,17 @@ def send_email(
 
     all_recipients = to_addrs + cc_addrs
 
-    if smtp_tls:
+    # smtp_tls="starttls" → SMTP + STARTTLS
+    # smtp_tls="ssl"      → SMTP_SSL
+    # smtp_tls=False/""   → plain SMTP (internal relay)
+    smtp_mode = os.getenv("SMTP_MODE", "").lower()
+    if smtp_mode == "ssl":
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+    elif smtp_tls or smtp_mode == "starttls":
         server = smtplib.SMTP(smtp_host, smtp_port)
         server.starttls()
     else:
-        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        server = smtplib.SMTP(smtp_host, smtp_port)
 
     if smtp_user and smtp_pass:
         server.login(smtp_user, smtp_pass)
