@@ -9,3 +9,4 @@ frontend/.astro/
 frontend/dist/
 attachments/
 *.xlsx
+!example.xlsx

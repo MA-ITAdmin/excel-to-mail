@@ -8,12 +8,14 @@ import openpyxl
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from database import get_db, init_db
 from email_service import render_template, send_email, split_emails
 
 ATTACHMENTS_DIR = Path(__file__).parent.parent / "attachments"
+EXAMPLE_FILE = Path(__file__).parent.parent / "example.xlsx"
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -335,3 +337,14 @@ def get_config():
         "smtp_from": os.getenv("SMTP_FROM", os.getenv("SMTP_USER", "")),
         "test_email": os.getenv("TEST_EMAIL", ""),
     }
+
+
+@app.get("/api/example")
+def download_example():
+    if not EXAMPLE_FILE.exists():
+        raise HTTPException(status_code=404, detail="範例檔案不存在")
+    return FileResponse(
+        path=EXAMPLE_FILE,
+        filename="example.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
