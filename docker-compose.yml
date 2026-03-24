@@ -7,9 +7,13 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - MAILPIT_HOST=mailpit
     volumes:
       - ./attachments:/app/attachments
       - ./data:/app/data
+    depends_on:
+      - mailpit
     restart: unless-stopped
 
   frontend:
