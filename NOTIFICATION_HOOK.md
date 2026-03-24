@@ -42,7 +42,7 @@ import subprocess
 def notify_task_complete(task_name):
     subprocess.run([
         "python3", 
-        "/Users/chao/Documents/projects/opr-sendmail/notify.py",
+        "/Users/chao/Documents/projects/excel-to-mail/notify.py",
         "✓ 編碼任務完成",
         task_name
     ])
@@ -82,7 +82,7 @@ cat notification.log
 如果需要修改通知內容或日誌位置，可編輯 `notify.py` 中的以下部分：
 
 ```python
-log_file = "/Users/chao/Documents/projects/opr-sendmail/notification.log"
+log_file = "/Users/chao/Documents/projects/excel-to-mail/notification.log"
 ```
 
 ## ⚠️ 注意事項

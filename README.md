@@ -19,8 +19,8 @@ sudo usermod -aG docker $USER && newgrp docker
 
 ```bash
 # 1. 拉取專案
-git clone git@github.com:MA-ITAdmin/opr-sendmail.git
-cd opr-sendmail
+git clone git@github.com:MA-ITAdmin/excel-to-mail.git
+cd excel-to-mail
 
 # 2. 建立 .env
 cp .env.example .env

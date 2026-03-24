@@ -65,7 +65,7 @@ def log_notification(title: str, message: str):
     """
     將通知記錄到檔案
     """
-    log_file = "/Users/chao/Documents/projects/opr-sendmail/notification.log"
+    log_file = "/Users/chao/Documents/projects/excel-to-mail/notification.log"
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] {title}: {message}\n")
