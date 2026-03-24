@@ -587,11 +587,19 @@
               ${rows_html}
               <div style="display:flex;background:#fff;border-bottom:1px solid #f0f0f0;">
                 <div style="flex:0 0 130px;padding:9px 12px;font-weight:600;color:#555;font-size:0.88rem;">Email Subject</div>
-                <div style="flex:1;padding:9px 12px;color:#222;font-size:0.88rem;word-break:break-word;min-width:0;">${esc(r['Email Subject'] || '')}</div>
+                <div style="flex:1;padding:9px 12px;color:#222;font-size:0.88rem;word-break:break-word;min-width:0;">${esc(renderTemplate(r['Email Subject'], r))}</div>
               </div>
             </div>
             <div style="font-weight:600;color:#555;font-size:0.88rem;margin-bottom:6px;">Email Content</div>
-            <div style="padding:12px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;white-space:pre-wrap;font-size:0.88rem;color:#333;line-height:1.7;">${esc(r['Email Content'] || '')}</div>`;
+            ${(() => {
+              const content = renderTemplate(r['Email Content'] || '', r);
+              const isHtml = /<[a-z][\s\S]*>/i.test(content);
+              if (isHtml) {
+                return `<div style="padding:12px;background:#fff;border:1px solid #e0e0e0;border-radius:8px;font-size:0.88rem;color:#333;line-height:1.7;">${content}</div>`;
+              } else {
+                return `<div style="padding:12px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;white-space:pre-wrap;font-size:0.88rem;color:#333;line-height:1.7;">${esc(content)}</div>`;
+              }
+            })()}`;
           previewModal.style.display = 'flex';
         });
       });
@@ -763,6 +771,15 @@
     function esc(str) {
       return String(str == null ? '' : str)
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function renderTemplate(template, row) {
+      if (!template) return '';
+      let result = template;
+      for (const [key, value] of Object.entries(row)) {
+        result = result.replaceAll(`{${key}}`, value || '');
+      }
+      return result;
     }
 
     // Clean up current session when leaving the page
