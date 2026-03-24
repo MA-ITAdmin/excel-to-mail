@@ -81,19 +81,13 @@ The backend handles Excel formulas — `resolve_cell()` in `main.py` evaluates `
 - `POST /api/send` — send single row (`SendRequest`: `session_id`, `row_index`, `send_type`)
 - `POST /api/send-all` — send all rows (`SendAllRequest`: `session_id`, `send_type`)
 - `GET /api/logs/{session_id}` — fetch send history for a session
+- `DELETE /api/sessions/{session_id}` — delete session, its send logs, and attachment folder
 - `GET /api/config` — non-sensitive config (smtp_host, smtp_from, test_email)
 - `GET /api/example` — download `example.xlsx` template
 
 CORS is configured for `localhost:4321` (dev frontend) and `localhost:8080` (Docker frontend).
 
-## Task Completion Notifications
-
-A macOS desktop notification hook exists at the repo root:
-```bash
-python3 notify.py "Title" "Description"
-./task_complete.sh "Description"
-```
-Notifications are logged to `notification.log`. Only works on macOS (requires Terminal notification permission).
+**Session cleanup:** On startup, `cleanup_old_sessions(days=7)` in `database.py` auto-deletes sessions older than 7 days and their attachment folders. The frontend also calls `DELETE /api/sessions/{session_id}` on `pagehide` to clean up immediately when the user leaves.
 
 ## Dependencies
 
