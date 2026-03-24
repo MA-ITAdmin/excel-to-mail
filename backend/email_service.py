@@ -9,9 +9,6 @@ from typing import Optional
 import os
 
 
-ATTACHMENTS_DIR = Path(__file__).parent.parent / "attachments"
-
-
 def split_emails(raw: str) -> list[str]:
     """Split email string by ; or , and strip whitespace."""
     if not raw or not raw.strip():
@@ -39,7 +36,7 @@ def send_email(
     cc_addrs: list[str],
     subject: str,
     body: str,
-    attachment_filename: Optional[str] = None,
+    attachment_path: Optional[Path] = None,
 ) -> None:
     msg = MIMEMultipart()
     msg["From"] = from_addr
@@ -55,18 +52,16 @@ def send_email(
         # Convert newlines to <br> for plain text
         msg.attach(MIMEText(body, "plain", "utf-8"))
 
-    if attachment_filename:
-        attachment_path = ATTACHMENTS_DIR / attachment_filename
-        if attachment_path.exists():
-            with open(attachment_path, "rb") as f:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(f.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                "Content-Disposition",
-                f'attachment; filename="{attachment_filename}"',
-            )
-            msg.attach(part)
+    if attachment_path and attachment_path.exists():
+        with open(attachment_path, "rb") as f:
+            part = MIMEBase("application", "octet-stream")
+            part.set_payload(f.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            "Content-Disposition",
+            f'attachment; filename="{attachment_path.name}"',
+        )
+        msg.attach(part)
 
     all_recipients = to_addrs + cc_addrs
 

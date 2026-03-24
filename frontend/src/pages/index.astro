@@ -241,8 +241,9 @@
       <input type="file" id="file-input" accept=".xlsx,.xls" />
     </div>
 
-    <div class="card">
+    <div class="card" id="attach-card" style="display:none">
       <h2>上傳附件</h2>
+      <div id="attach-required" style="margin-bottom:14px;display:flex;flex-wrap:wrap;gap:8px;"></div>
       <div class="upload-zone" id="attach-zone">
         <div class="icon">📎</div>
         <p><strong>點擊選擇</strong>或拖曳附件至此（可多選）</p>
@@ -336,6 +337,8 @@
     let rowStatuses = [];
     let rowErrors = [];
     let rowChecked = [];
+    let requiredAttachments = new Set();  // filenames needed by current Excel
+    let uploadedAttachments = new Set();  // filenames already uploaded this session
 
     // Attachments upload
     const attachZone = document.getElementById('attach-zone');
@@ -355,36 +358,47 @@
     });
 
     async function handleAttachUpload(files) {
+      if (!sessionId) { toast('請先上傳 Excel', 'error'); return; }
       const fd = new FormData();
       for (const f of files) fd.append('files', f);
       try {
-        const res = await fetch(`${API}/api/attachments`, { method: 'POST', body: fd });
+        const res = await fetch(`${API}/api/attachments/${sessionId}`, { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '上傳失敗');
-        renderAttachList(data.saved);
+        data.saved.forEach(f => uploadedAttachments.add(f));
+        renderAttachStatus();
+        
+        // Update row checked status - auto-check rows that now have all attachments
+        rows.forEach((r, i) => {
+          const attachmentNeeded = (r['Attachment'] || '').trim();
+          // If this row needs an attachment and it's now uploaded, auto-check it (if no other errors)
+          if (attachmentNeeded && uploadedAttachments.has(attachmentNeeded) && rowErrors[i].length === 0) {
+            rowChecked[i] = true;
+          }
+        });
+        renderTable();
+        updateStats();
+        
         toast('已上傳 ' + data.saved.length + ' 個附件', 'success');
       } catch (err) {
         toast('附件上傳失敗: ' + err.message, 'error');
       }
     }
 
-    async function loadAttachList() {
-      try {
-        const res = await fetch(`${API}/api/attachments`);
-        const data = await res.json();
-        renderAttachList(data.files);
-      } catch {}
+    function renderAttachStatus() {
+      const required = document.getElementById('attach-required');
+      const list = document.getElementById('attach-list');
+      if (!requiredAttachments.size) {
+        required.innerHTML = '<span style="font-size:0.85rem;color:#888;">本次 Excel 無需附件</span>';
+        list.innerHTML = '';
+        return;
+      }
+      required.innerHTML = [...requiredAttachments].map(f => {
+        const ok = uploadedAttachments.has(f);
+        return `<span style="background:${ok ? '#e6f4ea' : '#fce8e6'};border-radius:6px;padding:4px 10px;font-size:0.82rem;color:${ok ? '#137333' : '#c5221f'};">${ok ? '✓' : '✗'} ${esc(f)}</span>`;
+      }).join('');
+      list.innerHTML = '';
     }
-
-    function renderAttachList(files) {
-      const el = document.getElementById('attach-list');
-      if (!files.length) { el.innerHTML = ''; return; }
-      el.innerHTML = files.map(f =>
-        `<span style="background:#f1f3f4;border-radius:6px;padding:4px 10px;font-size:0.82rem;color:#444;">📄 ${esc(f)}</span>`
-      ).join('');
-    }
-
-    loadAttachList();
 
     // Upload
     const uploadZone = document.getElementById('upload-zone');
@@ -415,7 +429,22 @@
         rows = data.rows;
         rowErrors = data.row_errors || rows.map(() => []);
         rowStatuses = rows.map(() => 'pending');
-        rowChecked = rows.map((_, i) => rowErrors[i].length === 0);
+        
+        // Reset attachment tracking for new session
+        uploadedAttachments = new Set();
+        requiredAttachments = new Set(
+          rows.map(r => (r['Attachment'] || '').trim()).filter(Boolean)
+        );
+        
+        // Only auto-check rows without errors AND without required attachments
+        rowChecked = rows.map((r, i) => {
+          if (rowErrors[i].length > 0) return false;  // Has validation errors
+          const attachmentNeeded = (r['Attachment'] || '').trim();
+          if (attachmentNeeded) return false;  // Has attachment requirement but not uploaded yet
+          return true;  // No errors and no attachment needed
+        });
+        document.getElementById('attach-card').style.display = 'block';
+        renderAttachStatus();
 
         const invalidCount = rowErrors.filter(e => e.length > 0).length;
         document.getElementById('filename-label').textContent = '📄 ' + data.filename;
@@ -492,6 +521,11 @@
 
     async function sendOne(idx, type) {
       if (!sessionId) return;
+      const att = (rows[idx]['Attachment'] || '').trim();
+      if (att && !uploadedAttachments.has(att)) {
+        toast(`請先上傳附件：${att}`, 'error');
+        return;
+      }
       updateRowStatus(idx, 'sending');
       try {
         const res = await fetch(`${API}/api/send`, {
@@ -513,6 +547,17 @@
       if (!sessionId || !rows.length) return;
       const selected = rows.reduce((acc, _, i) => rowChecked[i] ? [...acc, i] : acc, []);
       if (!selected.length) { toast('請先選取至少一列', 'error'); return; }
+
+      // Pre-flight: check all required attachments for selected rows are uploaded
+      const missing = new Set(
+        selected.map(i => (rows[i]['Attachment'] || '').trim())
+                .filter(f => f && !uploadedAttachments.has(f))
+      );
+      if (missing.size > 0) {
+        toast('發送前請先上傳附件：' + [...missing].join('、'), 'error');
+        return;
+      }
+
       if (type === 'official') {
         if (!confirm(`確定要發送正式信件給已選取的 ${selected.length} 位收件人嗎？此操作無法復原。`)) return;
       }

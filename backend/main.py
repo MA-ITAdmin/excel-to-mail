@@ -13,8 +13,12 @@ from pydantic import BaseModel
 from database import get_db, init_db
 from email_service import render_template, send_email, split_emails
 
-ATTACHMENTS_DIR = Path(__file__).parent.parent / "attachments"
+ATTACHMENTS_BASE_DIR = Path(__file__).parent.parent / "attachments"
 EXAMPLE_FILE = Path(__file__).parent.parent / "example.xlsx"
+
+
+def get_session_dir(session_id: int) -> Path:
+    return ATTACHMENTS_BASE_DIR / str(session_id)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -74,9 +78,6 @@ def validate_row(row: dict) -> list[str]:
         for addr in split_emails(val):
             if not EMAIL_RE.match(addr):
                 errors.append(f"{field} 格式錯誤：{addr}")
-    attachment = row.get("Attachment", "").strip()
-    if attachment and not (ATTACHMENTS_DIR / attachment).exists():
-        errors.append(f"找不到附件：{attachment}")
     return errors
 
 
@@ -152,19 +153,22 @@ def parse_excel(file_bytes: bytes) -> tuple[list[dict], list[list[str]]]:
     return rows, row_errors
 
 
-@app.get("/api/attachments")
-def list_attachments():
-    ATTACHMENTS_DIR.mkdir(exist_ok=True)
-    files = [f.name for f in ATTACHMENTS_DIR.iterdir() if f.is_file() and not f.name.startswith(".")]
+@app.get("/api/attachments/{session_id}")
+def list_attachments(session_id: int):
+    session_dir = get_session_dir(session_id)
+    if not session_dir.exists():
+        return {"files": []}
+    files = [f.name for f in session_dir.iterdir() if f.is_file() and not f.name.startswith(".")]
     return {"files": sorted(files)}
 
 
-@app.post("/api/attachments")
-async def upload_attachments(files: list[UploadFile] = File(...)):
-    ATTACHMENTS_DIR.mkdir(exist_ok=True)
+@app.post("/api/attachments/{session_id}")
+async def upload_attachments(session_id: int, files: list[UploadFile] = File(...)):
+    session_dir = get_session_dir(session_id)
+    session_dir.mkdir(parents=True, exist_ok=True)
     saved = []
     for file in files:
-        dest = ATTACHMENTS_DIR / file.filename
+        dest = session_dir / file.filename
         content = await file.read()
         dest.write_bytes(content)
         saved.append(file.filename)
@@ -242,7 +246,8 @@ def send_one(req: SendRequest):
         raise HTTPException(status_code=400, detail="收件人 E-mail 為空")
 
     attachment_filename = row["Attachment"] or None
-    if attachment_filename and not (ATTACHMENTS_DIR / attachment_filename).exists():
+    attachment_path = (get_session_dir(req.session_id) / attachment_filename) if attachment_filename else None
+    if attachment_path and not attachment_path.exists():
         conn.execute(
             "INSERT INTO send_logs (session_id, row_index, send_type, to_email, subject, status, error) VALUES (?,?,?,?,?,?,?)",
             (req.session_id, req.row_index, req.send_type, ",".join(to_addrs), subject, "error", f"找不到附件：{attachment_filename}"),
@@ -263,7 +268,7 @@ def send_one(req: SendRequest):
             cc_addrs=cc_addrs,
             subject=subject,
             body=body,
-            attachment_filename=attachment_filename,
+            attachment_path=attachment_path,
         )
         status = "success"
         error = None
@@ -309,7 +314,8 @@ def send_all(req: SendAllRequest):
             continue
 
         attachment_filename = row["Attachment"] or None
-        if attachment_filename and not (ATTACHMENTS_DIR / attachment_filename).exists():
+        attachment_path = (get_session_dir(req.session_id) / attachment_filename) if attachment_filename else None
+        if attachment_path and not attachment_path.exists():
             err_msg = f"找不到附件：{attachment_filename}"
             conn.execute(
                 "INSERT INTO send_logs (session_id, row_index, send_type, to_email, cc_email, subject, status, error) VALUES (?,?,?,?,?,?,?,?)",
@@ -330,7 +336,7 @@ def send_all(req: SendAllRequest):
                 cc_addrs=cc_addrs,
                 subject=subject,
                 body=body,
-                attachment_filename=attachment_filename,
+                attachment_path=attachment_path,
             )
             status = "success"
             error = None
