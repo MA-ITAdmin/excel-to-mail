@@ -1,4 +1,4 @@
-# OPR SendMail
+# excel-to-mail
 
 Excel 批次寄信工具，支援個人化內容與 PDF 附件。
 

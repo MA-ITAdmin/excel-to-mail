@@ -237,34 +237,9 @@
     #toast.error   { background: #c5221f; }
     #toast.info    { background: #1a73e8; }
 
-    .tooltip-cell { cursor: help; position: relative; }
-    
-    .tooltip {
-      position: fixed;
-      background: #333;
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      white-space: normal;
-      max-width: 300px;
-      word-wrap: break-word;
-      z-index: 10000;
-      opacity: 1;
-      pointer-events: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      line-height: 1.4;
-      animation: tooltipFadeIn 0.05s ease-out;
-    }
-    @keyframes tooltipFadeIn { from { opacity: 0; } to { opacity: 1; } }
     .tooltip::after {
       content: '';
-      position: absolute;
-      bottom: -5px;
-      left: 50%;
-      transform: translateX(-50%);
-      border: 5px solid transparent;
-      border-top-color: #333;
+      display: none;
     }
 
     #data-section { display: none; }
@@ -339,7 +314,6 @@
           <span style="width:1px;height:20px;background:#e0e0e0;display:inline-block;margin:0 4px;"></span>
           <button class="btn btn-outline" id="btn-send-test">🧪 發測試信</button>
           <button class="btn btn-danger" id="btn-send-official">📤 發正式信</button>
-          <span id="filename-label" style="font-size:0.85rem;color:#888"></span>
         </div>
 
         <div id="progress-wrap">
@@ -355,7 +329,7 @@
             <thead>
               <tr>
                 <th><input type="checkbox" id="check-all" title="全選/取消全選" /></th>
-                <th>#</th>
+                <th>預覽</th>
                 <th>Sales</th>
                 <th>Attn</th>
                 <th>E-mail</th>
@@ -374,6 +348,17 @@
 
   </main>
   <div id="toast"></div>
+
+  <!-- 預覽 Modal -->
+  <div id="preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;width:720px;max-width:94vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #e0e0e0;">
+        <span id="preview-title" style="font-weight:600;font-size:1rem;color:#222;"></span>
+        <button id="preview-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:#666;line-height:1;">✕</button>
+      </div>
+      <div id="preview-body" style="padding:16px 20px;"></div>
+    </div>
+  </div>
 
   <script>
     const API = import.meta.env.PUBLIC_API_URL || '';
@@ -495,7 +480,6 @@
         renderAttachStatus();
 
         const invalidCount = rowErrors.filter(e => e.length > 0).length;
-        document.getElementById('filename-label').textContent = '📄 ' + data.filename;
         renderTable();
         document.getElementById('data-section').style.display = 'block';
         document.getElementById('progress-wrap').style.display = 'none';
@@ -538,21 +522,22 @@
         return `
         <tr id="row-${i}" class="${rowClass}">
           <td><input type="checkbox" class="row-check" data-idx="${i}" ${checked} /></td>
-          <td>${i + 1}</td>
-          <td class="tooltip-cell" title="${esc(r['Sales'])}">${esc(r['Sales'])}</td>
-          <td class="tooltip-cell" title="${esc(r['Attn'])}">${esc(r['Attn'])}</td>
-          <td class="tooltip-cell" title="${esc(r['E-mail'])}">${esc(r['E-mail'])}</td>
-          <td class="tooltip-cell" title="${esc(r['Email CC'])}">${esc(r['Email CC'])}</td>
-          <td class="tooltip-cell" title="${esc(r['Attachment'] || '')}">${attachmentText}</td>
-          <td class="tooltip-cell" title="${esc(r['Email Subject'])}">${subjectText}</td>
-          <td class="tooltip-cell" title="${esc(r['Email Content'])}">${contentText}</td>
-          <td id="status-${i}" class="tooltip-cell" title="${errorsDisplay}">
+          <td><span class="row-preview-btn" data-idx="${i}" style="cursor:pointer;color:#1a73e8;text-decoration:underline;font-weight:500;">${i + 1}</span></td>
+          <td>${esc(r['Sales'])}</td>
+          <td>${esc(r['Attn'])}</td>
+          <td>${esc(r['E-mail'])}</td>
+          <td>${esc(r['Email CC'])}</td>
+          <td>${attachmentText}</td>
+          <td>${subjectText}</td>
+          <td>${contentText}</td>
+          <td id="status-${i}">
             <span class="status-badge ${statusClass}">${statusText}</span>
           </td>
         </tr>`;
       }).join('');
       document.getElementById('check-all').checked = rowChecked.every(Boolean);
       initTooltips();
+      initPreviewBtns();
     }
 
     function updateRowStatus(i, status, msg) {
@@ -572,42 +557,46 @@
       updateStats();
     }
 
-    function initTooltips() {
-      let activeTooltip = null;
-      let hideTimeout = null;
-      
-      document.querySelectorAll('.tooltip-cell').forEach(el => {
-        // 禁用浏览器默认 title tooltip
-        el.addEventListener('mouseenter', (e) => {
-          clearTimeout(hideTimeout);
-          
-          const tooltip_text = el.getAttribute('title');
-          if (!tooltip_text) return;
-          
-          if (activeTooltip) activeTooltip.remove();
-          
-          const tooltip = document.createElement('div');
-          tooltip.className = 'tooltip';
-          tooltip.textContent = tooltip_text;
-          document.body.appendChild(tooltip);
-          
-          const rect = el.getBoundingClientRect();
-          tooltip.style.left = (rect.left + rect.width / 2 - 150) + 'px';
-          tooltip.style.top = (rect.top - 45) + 'px';
-          
-          activeTooltip = tooltip;
-          
-          // 阻止浏览器默认 tooltip
-          e.preventDefault();
-        }, true);
+    function initTooltips() {}
 
-        el.addEventListener('mouseleave', () => {
-          hideTimeout = setTimeout(() => {
-            if (activeTooltip) {
-              activeTooltip.remove();
-              activeTooltip = null;
-            }
-          }, 50);
+    // Preview Modal
+    const previewModal = document.getElementById('preview-modal');
+    document.getElementById('preview-close').addEventListener('click', () => {
+      previewModal.style.display = 'none';
+    });
+    previewModal.addEventListener('click', (e) => {
+      if (e.target === previewModal) previewModal.style.display = 'none';
+    });
+
+    function initPreviewBtns() {
+      document.querySelectorAll('.row-preview-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const i = parseInt(btn.dataset.idx);
+          const r = rows[i];
+          document.getElementById('preview-title').textContent = `第 ${i + 1} 筆資料預覽`;
+          const fields = [
+            ['Sales', r['Sales']],
+            ['Attn', r['Attn']],
+            ['E-mail', r['E-mail']],
+            ['Email CC', r['Email CC']],
+            ['Attachment', r['Attachment']],
+          ];
+          const rows_html = fields.map(([k, v], idx) => `
+            <div style="display:flex;border-bottom:1px solid #f0f0f0;background:${idx%2?'#f7f7f7':'#fff'};">
+              <div style="flex:0 0 130px;padding:9px 12px;font-weight:600;color:#555;font-size:0.88rem;">${k}</div>
+              <div style="flex:1;padding:9px 12px;color:#222;font-size:0.88rem;word-break:break-word;min-width:0;">${esc(v || '')}</div>
+            </div>`).join('');
+          document.getElementById('preview-body').innerHTML = `
+            <div style="border:1px solid #e0e0e0;border-radius:8px;overflow:hidden;margin-bottom:12px;">
+              ${rows_html}
+              <div style="display:flex;background:#fff;border-bottom:1px solid #f0f0f0;">
+                <div style="flex:0 0 130px;padding:9px 12px;font-weight:600;color:#555;font-size:0.88rem;">Email Subject</div>
+                <div style="flex:1;padding:9px 12px;color:#222;font-size:0.88rem;word-break:break-word;min-width:0;">${esc(r['Email Subject'] || '')}</div>
+              </div>
+            </div>
+            <div style="font-weight:600;color:#555;font-size:0.88rem;margin-bottom:6px;">Email Content</div>
+            <div style="padding:12px;background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;white-space:pre-wrap;font-size:0.88rem;color:#333;line-height:1.7;">${esc(r['Email Content'] || '')}</div>`;
+          previewModal.style.display = 'flex';
         });
       });
     }
