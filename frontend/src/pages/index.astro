@@ -143,29 +143,43 @@
     }
     th {
       background: #f1f3f4;
-      padding: 10px 12px;
+      padding: 6px 8px;
       text-align: left;
       font-weight: 600;
       color: #444;
       white-space: nowrap;
+      height: 32px;
     }
     td {
-      padding: 10px 12px;
+      padding: 6px 8px;
       border-bottom: 1px solid #f0f0f0;
-      vertical-align: top;
-      max-width: 200px;
+      vertical-align: middle;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      height: 32px;
     }
     tr:hover td { background: #f8f9ff; }
+    
+    /* 列寬設定 */
+    td:nth-child(1), th:nth-child(1) { width: 24px; }
+    td:nth-child(2), th:nth-child(2) { width: 36px; }
+    td:nth-child(3), th:nth-child(3) { width: 90px; }
+    td:nth-child(4), th:nth-child(4) { width: 100px; }
+    td:nth-child(5), th:nth-child(5) { width: 140px; }
+    td:nth-child(6), th:nth-child(6) { width: 120px; }
+    td:nth-child(7), th:nth-child(7) { width: 100px; }
+    td:nth-child(8), th:nth-child(8) { width: 120px; }
+    td:nth-child(9), th:nth-child(9) { width: 150px; }
+    td:nth-child(10), th:nth-child(10) { width: 80px; }
 
     .status-badge {
       display: inline-block;
-      padding: 2px 8px;
+      padding: 2px 6px;
       border-radius: 12px;
-      font-size: 0.78rem;
+      font-size: 0.75rem;
       font-weight: 600;
+      white-space: nowrap;
     }
     .badge-success { background: #e6f4ea; color: #137333; }
     .badge-error   { background: #fce8e6; color: #c5221f; }
@@ -220,6 +234,36 @@
     #toast.success { background: #137333; }
     #toast.error   { background: #c5221f; }
     #toast.info    { background: #1a73e8; }
+
+    .tooltip-cell { cursor: help; position: relative; }
+    
+    .tooltip {
+      position: fixed;
+      background: #333;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      white-space: normal;
+      max-width: 300px;
+      word-wrap: break-word;
+      z-index: 10000;
+      opacity: 1;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      line-height: 1.4;
+      animation: tooltipFadeIn 0.05s ease-out;
+    }
+    @keyframes tooltipFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .tooltip::after {
+      content: '';
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: #333;
+    }
 
     #data-section { display: none; }
   </style>
@@ -318,7 +362,6 @@
                 <th>Email Subject</th>
                 <th>Email Content</th>
                 <th>狀態</th>
-                <th>操作</th>
               </tr>
             </thead>
             <tbody id="table-body"></tbody>
@@ -473,28 +516,38 @@
         const hasErr = errs.length > 0;
         const checked = rowChecked[i] ? 'checked' : '';
         const rowClass = hasErr ? 'row-invalid' : '';
-        const statusCell = hasErr
-          ? `<span class="status-badge badge-warning" title="${esc(errs.join('\n'))}">⚠ 有問題</span><div class="error-list">${errs.map(esc).join('<br>')}</div>`
-          : `<span class="status-badge badge-pending">待發送</span>`;
+        const statusText = hasErr ? '⚠ 有問題' : '待發送';
+        const statusClass = hasErr ? 'badge-warning' : 'badge-pending';
+        const errorsDisplay = hasErr ? (`錯誤：${errs.join('; ')}`) : '';
+        
+        // 文本截斷函數
+        const truncate = (text, len = 30) => {
+          text = esc(text);
+          return text.length > len ? text.substring(0, len) + '…' : text;
+        };
+        
+        const attachmentText = truncate(r['Attachment'] || '', 15);
+        const subjectText = truncate(r['Email Subject'] || '', 30);
+        const contentText = truncate(r['Email Content'] || '', 40);
+        
         return `
         <tr id="row-${i}" class="${rowClass}">
           <td><input type="checkbox" class="row-check" data-idx="${i}" ${checked} /></td>
           <td>${i + 1}</td>
-          <td title="${esc(r['Sales'])}">${esc(r['Sales'])}</td>
-          <td title="${esc(r['Attn'])}">${esc(r['Attn'])}</td>
-          <td title="${esc(r['E-mail'])}">${esc(r['E-mail'])}</td>
-          <td title="${esc(r['Email CC'])}">${esc(r['Email CC'])}</td>
-          <td title="${esc(r['Attachment'])}">${esc(r['Attachment'])}</td>
-          <td title="${esc(r['Email Subject'])}">${esc(r['Email Subject'])}</td>
-          <td title="${esc(r['Email Content'])}" style="max-width:180px">${esc(r['Email Content']).substring(0,50)}${r['Email Content'].length>50?'…':''}</td>
-          <td id="status-${i}">${statusCell}</td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-outline btn-sm" data-idx="${i}" data-type="test">測試</button>
-            <button class="btn btn-danger btn-sm" style="margin-left:4px" data-idx="${i}" data-type="official">發送</button>
+          <td class="tooltip-cell" title="${esc(r['Sales'])}">${esc(r['Sales'])}</td>
+          <td class="tooltip-cell" title="${esc(r['Attn'])}">${esc(r['Attn'])}</td>
+          <td class="tooltip-cell" title="${esc(r['E-mail'])}">${esc(r['E-mail'])}</td>
+          <td class="tooltip-cell" title="${esc(r['Email CC'])}">${esc(r['Email CC'])}</td>
+          <td class="tooltip-cell" title="${esc(r['Attachment'] || '')}">${attachmentText}</td>
+          <td class="tooltip-cell" title="${esc(r['Email Subject'])}">${subjectText}</td>
+          <td class="tooltip-cell" title="${esc(r['Email Content'])}">${contentText}</td>
+          <td id="status-${i}" class="tooltip-cell" title="${errorsDisplay}">
+            <span class="status-badge ${statusClass}">${statusText}</span>
           </td>
         </tr>`;
       }).join('');
       document.getElementById('check-all').checked = rowChecked.every(Boolean);
+      initTooltips();
     }
 
     function updateRowStatus(i, status, msg) {
@@ -503,12 +556,55 @@
       if (!cell) return;
       if (status === 'success') {
         cell.innerHTML = '<span class="status-badge badge-success">✓ 成功</span>';
+        cell.setAttribute('title', '');
       } else if (status === 'error') {
-        cell.innerHTML = '<span class="status-badge badge-error" title="' + esc(msg||'') + '">✗ 失敗</span>';
+        cell.innerHTML = '<span class="status-badge badge-error">✗ 失敗</span>';
+        cell.setAttribute('title', msg || '');
       } else {
         cell.innerHTML = '<span class="status-badge badge-pending">⏳ 發送中</span>';
+        cell.setAttribute('title', '');
       }
       updateStats();
+    }
+
+    function initTooltips() {
+      let activeTooltip = null;
+      let hideTimeout = null;
+      
+      document.querySelectorAll('.tooltip-cell').forEach(el => {
+        // 禁用浏览器默认 title tooltip
+        el.addEventListener('mouseenter', (e) => {
+          clearTimeout(hideTimeout);
+          
+          const tooltip_text = el.getAttribute('title');
+          if (!tooltip_text) return;
+          
+          if (activeTooltip) activeTooltip.remove();
+          
+          const tooltip = document.createElement('div');
+          tooltip.className = 'tooltip';
+          tooltip.textContent = tooltip_text;
+          document.body.appendChild(tooltip);
+          
+          const rect = el.getBoundingClientRect();
+          tooltip.style.left = (rect.left + rect.width / 2 - 150) + 'px';
+          tooltip.style.top = (rect.top - 45) + 'px';
+          
+          activeTooltip = tooltip;
+          
+          // 阻止浏览器默认 tooltip
+          e.preventDefault();
+        }, true);
+
+        el.addEventListener('mouseleave', () => {
+          hideTimeout = setTimeout(() => {
+            if (activeTooltip) {
+              activeTooltip.remove();
+              activeTooltip = null;
+            }
+          }, 50);
+        });
+      });
     }
 
     function updateStats() {
@@ -632,11 +728,7 @@
       updateStats();
     });
 
-    document.getElementById('table-body').addEventListener('click', e => {
-      const btn = e.target.closest('button[data-idx]');
-      if (!btn) return;
-      sendOne(parseInt(btn.dataset.idx), btn.dataset.type);
-    });
+
 
     let toastTimer;
     function toast(msg, type) {

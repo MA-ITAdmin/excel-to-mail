@@ -50,7 +50,7 @@ def get_smtp_config():
 
 def get_mailpit_config():
     return {
-        "smtp_host": os.getenv("MAILPIT_HOST", "mailpit"),
+        "smtp_host": os.getenv("MAILPIT_HOST", "localhost"),
         "smtp_port": int(os.getenv("MAILPIT_PORT", "1025")),
         "smtp_user": "",
         "smtp_pass": "",
