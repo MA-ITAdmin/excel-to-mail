@@ -1,4 +1,5 @@
 ---
+const mailpitUrl = import.meta.env.PUBLIC_MAILPIT_URL || 'http://localhost:8025';
 ---
 <!DOCTYPE html>
 <html lang="zh-TW">
@@ -301,7 +302,7 @@
       <h2>設定</h2>
       <p style="font-size:0.88rem;color:#555;">發測試信時，信件會透過 <strong>Mailpit</strong> 攔截，不會寄出至真實收件人。</p>
       <div style="margin-top:12px;">
-        <a href="http://localhost:8025" target="_blank" class="btn btn-outline btn-sm">📬 開啟 Mailpit 查看測試信件</a>
+        <a href={mailpitUrl} target="_blank" class="btn btn-outline btn-sm">📬 開啟 Mailpit 查看測試信件</a>
       </div>
     </div>
 

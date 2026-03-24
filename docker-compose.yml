@@ -20,6 +20,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        - PUBLIC_MAILPIT_URL=${PUBLIC_MAILPIT_URL:-http://localhost:8025}
     ports:
       - "8080:80"
     depends_on:
