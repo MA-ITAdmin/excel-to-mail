@@ -1,8 +1,5 @@
 FROM node:22-alpine AS build
 
-ARG PUBLIC_MAILPIT_URL=http://localhost:8025
-ENV PUBLIC_MAILPIT_URL=${PUBLIC_MAILPIT_URL}
-
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
