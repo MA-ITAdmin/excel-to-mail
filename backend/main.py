@@ -210,11 +210,13 @@ class SendRequest(BaseModel):
     session_id: int
     row_index: int
     send_type: str  # "test" or "official"
+    ignore_attachment: bool = False
 
 
 class SendAllRequest(BaseModel):
     session_id: int
     send_type: str  # "test" or "official"
+    ignore_attachment: bool = False
 
 
 @app.post("/api/send")
@@ -251,13 +253,15 @@ def send_one(req: SendRequest):
     attachment_filename = row["Attachment"] or None
     attachment_path = (get_session_dir(req.session_id) / attachment_filename) if attachment_filename else None
     if attachment_path and not attachment_path.exists():
-        conn.execute(
-            "INSERT INTO send_logs (session_id, row_index, send_type, to_email, subject, status, error) VALUES (?,?,?,?,?,?,?)",
-            (req.session_id, req.row_index, req.send_type, ",".join(to_addrs), subject, "error", f"找不到附件：{attachment_filename}"),
-        )
-        conn.commit()
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"找不到附件：{attachment_filename}")
+        if not req.ignore_attachment:
+            conn.execute(
+                "INSERT INTO send_logs (session_id, row_index, send_type, to_email, subject, status, error) VALUES (?,?,?,?,?,?,?)",
+                (req.session_id, req.row_index, req.send_type, ",".join(to_addrs), subject, "error", f"找不到附件：{attachment_filename}"),
+            )
+            conn.commit()
+            conn.close()
+            raise HTTPException(status_code=400, detail=f"找不到附件：{attachment_filename}")
+        attachment_path = None  # 忽略附件，不夾帶
 
     try:
         send_email(
@@ -319,13 +323,15 @@ def send_all(req: SendAllRequest):
         attachment_filename = row["Attachment"] or None
         attachment_path = (get_session_dir(req.session_id) / attachment_filename) if attachment_filename else None
         if attachment_path and not attachment_path.exists():
-            err_msg = f"找不到附件：{attachment_filename}"
-            conn.execute(
-                "INSERT INTO send_logs (session_id, row_index, send_type, to_email, cc_email, subject, status, error) VALUES (?,?,?,?,?,?,?,?)",
-                (req.session_id, i, req.send_type, ",".join(to_addrs), ",".join(cc_addrs), subject, "error", err_msg),
-            )
-            results.append({"row": i, "status": "error", "error": err_msg})
-            continue
+            if not req.ignore_attachment:
+                err_msg = f"找不到附件：{attachment_filename}"
+                conn.execute(
+                    "INSERT INTO send_logs (session_id, row_index, send_type, to_email, cc_email, subject, status, error) VALUES (?,?,?,?,?,?,?,?)",
+                    (req.session_id, i, req.send_type, ",".join(to_addrs), ",".join(cc_addrs), subject, "error", err_msg),
+                )
+                results.append({"row": i, "status": "error", "error": err_msg})
+                continue
+            attachment_path = None  # 忽略附件，不夾帶
 
         try:
             send_email(

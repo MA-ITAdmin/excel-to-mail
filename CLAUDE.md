@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-OPR SendMail is a bulk email sender that reads recipient data from an Excel file and sends personalized emails with PDF attachments. It has a FastAPI backend and an Astro frontend (single-page, no framework components).
+excel-to-mail is a bulk email sender that reads recipient data from an Excel file and sends personalized emails with PDF attachments. It has a FastAPI backend and an Astro frontend (single-page, no framework components).
 
 ## Running the App
 
@@ -72,6 +72,8 @@ Key env vars:
 The backend handles Excel formulas — `resolve_cell()` in `main.py` evaluates `=` formulas and `"text"&B2` style concatenations using `eval_concat()`.
 
 **Test vs Official send:** Test mode routes all emails through Mailpit (port 1025 SMTP, port 8025 Web UI) for local interception — emails are never delivered to real recipients. Official mode uses `.env` SMTP config. CC is suppressed in test mode.
+
+**Ignore attachment (test only):** Frontend has an "忽略附件（測試用）" toggle. When enabled with test mode, the pre-flight attachment check is skipped and `ignore_attachment: true` is sent to the backend. The backend then skips the attachment-not-found error and sends the email without attachment instead of failing.
 
 ## API Endpoints
 

@@ -314,6 +314,11 @@
           <span style="width:1px;height:20px;background:#e0e0e0;display:inline-block;margin:0 4px;"></span>
           <button class="btn btn-outline" id="btn-send-test">🧪 發測試信</button>
           <button class="btn btn-danger" id="btn-send-official">📤 發正式信</button>
+          <span style="width:1px;height:20px;background:#e0e0e0;display:inline-block;margin:0 4px;"></span>
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.85rem;color:#666;cursor:pointer;user-select:none;">
+            <input type="checkbox" id="ignore-attachment" style="cursor:pointer;">
+            忽略附件（測試用）
+          </label>
         </div>
 
         <div id="progress-wrap">
@@ -611,8 +616,9 @@
 
     async function sendOne(idx, type) {
       if (!sessionId) return;
+      const ignoreAttachment = type === 'test' && document.getElementById('ignore-attachment').checked;
       const att = (rows[idx]['Attachment'] || '').trim();
-      if (att && !uploadedAttachments.has(att)) {
+      if (att && !uploadedAttachments.has(att) && !ignoreAttachment) {
         toast(`請先上傳附件：${att}`, 'error');
         return;
       }
@@ -621,7 +627,7 @@
         const res = await fetch(`${API}/api/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: sessionId, row_index: idx, send_type: type })
+          body: JSON.stringify({ session_id: sessionId, row_index: idx, send_type: type, ignore_attachment: ignoreAttachment })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || '發送失敗');
@@ -639,13 +645,16 @@
       if (!selected.length) { toast('請先選取至少一列', 'error'); return; }
 
       // Pre-flight: check all required attachments for selected rows are uploaded
-      const missing = new Set(
-        selected.map(i => (rows[i]['Attachment'] || '').trim())
-                .filter(f => f && !uploadedAttachments.has(f))
-      );
-      if (missing.size > 0) {
-        toast('發送前請先上傳附件：' + [...missing].join('、'), 'error');
-        return;
+      const ignoreAttachment = type === 'test' && document.getElementById('ignore-attachment').checked;
+      if (!ignoreAttachment) {
+        const missing = new Set(
+          selected.map(i => (rows[i]['Attachment'] || '').trim())
+                  .filter(f => f && !uploadedAttachments.has(f))
+        );
+        if (missing.size > 0) {
+          toast('發送前請先上傳附件：' + [...missing].join('、'), 'error');
+          return;
+        }
       }
 
       if (type === 'official') {
@@ -669,7 +678,7 @@
           const res = await fetch(`${API}/api/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ session_id: sessionId, row_index: i, send_type: type })
+            body: JSON.stringify({ session_id: sessionId, row_index: i, send_type: type, ignore_attachment: ignoreAttachment })
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.detail || '失敗');
