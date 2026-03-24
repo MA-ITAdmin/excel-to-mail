@@ -64,7 +64,7 @@ def get_mailpit_config():
 
 EMAIL_RE = re.compile(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
 
-EXPECTED_COLS = ["Sales", "Attn", "E-mail", "Email CC", "Attachment", "Email Subject", "Email Content"]
+EXPECTED_COLS = ["Sales", "Attn", "E-mail", "Email CC", "Email BCC", "Attachment", "Email Subject", "Email Content"]
 REQUIRED_COLS = ["E-mail", "Email Subject", "Email Content"]
 
 
@@ -73,7 +73,7 @@ def validate_row(row: dict) -> list[str]:
     for col in REQUIRED_COLS:
         if not row.get(col, "").strip():
             errors.append(f"{col} 不可為空")
-    for field in ["E-mail", "Email CC"]:
+    for field in ["E-mail", "Email CC", "Email BCC"]:
         val = row.get(field, "").strip()
         if not val:
             continue
@@ -240,6 +240,7 @@ def send_one(req: SendRequest):
 
     to_addrs = split_emails(row["E-mail"])
     cc_addrs = split_emails(row["Email CC"]) if req.send_type != "test" else []
+    bcc_addrs = split_emails(row.get("Email BCC", "")) if req.send_type != "test" else []
 
     if not to_addrs:
         conn.execute(
@@ -273,6 +274,7 @@ def send_one(req: SendRequest):
             from_addr=cfg["from_addr"],
             to_addrs=to_addrs,
             cc_addrs=cc_addrs,
+            bcc_addrs=bcc_addrs,
             subject=subject,
             body=body,
             attachment_path=attachment_path,
@@ -315,6 +317,7 @@ def send_all(req: SendAllRequest):
 
         to_addrs = split_emails(row["E-mail"])
         cc_addrs = split_emails(row["Email CC"]) if req.send_type != "test" else []
+        bcc_addrs = split_emails(row.get("Email BCC", "")) if req.send_type != "test" else []
 
         if not to_addrs:
             results.append({"row": i, "status": "error", "error": "收件人為空"})
@@ -343,6 +346,7 @@ def send_all(req: SendAllRequest):
                 from_addr=cfg["from_addr"],
                 to_addrs=to_addrs,
                 cc_addrs=cc_addrs,
+                bcc_addrs=bcc_addrs,
                 subject=subject,
                 body=body,
                 attachment_path=attachment_path,

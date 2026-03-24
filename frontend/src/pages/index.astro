@@ -163,17 +163,15 @@
     tbody tr:nth-child(even) td { background: #ebebeb; }
     tr:hover td { background: #f8f9ff; }
 
-    /* 列寬設定 */
+    /* 列寬設定：Checkbox | 預覽 | Sales | Attn | E-mail | Email CC | Email BCC | 狀態 */
     td:nth-child(1), th:nth-child(1) { width: 24px; }
     td:nth-child(2), th:nth-child(2) { width: 36px; }
     td:nth-child(3), th:nth-child(3) { width: 90px; }
     td:nth-child(4), th:nth-child(4) { width: 100px; }
-    td:nth-child(5), th:nth-child(5) { width: 140px; }
-    td:nth-child(6), th:nth-child(6) { width: 120px; }
-    td:nth-child(7), th:nth-child(7) { width: 100px; }
-    td:nth-child(8), th:nth-child(8) { width: 120px; }
-    td:nth-child(9), th:nth-child(9) { width: 150px; }
-    td:nth-child(10), th:nth-child(10) { width: 80px; }
+    td:nth-child(5), th:nth-child(5) { width: 200px; }
+    td:nth-child(6), th:nth-child(6) { width: 180px; }
+    td:nth-child(7), th:nth-child(7) { width: 180px; }
+    td:nth-child(8), th:nth-child(8) { width: 100px; }
 
     .status-badge {
       display: inline-block;
@@ -257,7 +255,7 @@
       <div class="upload-zone" id="upload-zone">
         <div class="icon">📂</div>
         <p><strong>點擊選擇</strong>或拖曳 Excel 檔案至此</p>
-        <p style="margin-top:6px;font-size:0.8rem;color:#999">支援 .xlsx、.xls 格式 &nbsp;|&nbsp; 欄位：Sales / Attn / E-mail / Email CC / Attachment / Email Subject / Email Content</p>
+        <p style="margin-top:6px;font-size:0.8rem;color:#999">支援 .xlsx、.xls 格式 &nbsp;|&nbsp; 欄位：Sales / Attn / E-mail / Email CC / Email BCC / Attachment / Email Subject / Email Content</p>
       </div>
       <input type="file" id="file-input" accept=".xlsx,.xls" />
     </div>
@@ -339,9 +337,7 @@
                 <th>Attn</th>
                 <th>E-mail</th>
                 <th>Email CC</th>
-                <th>Attachment</th>
-                <th>Email Subject</th>
-                <th>Email Content</th>
+                <th>Email BCC</th>
                 <th>狀態</th>
               </tr>
             </thead>
@@ -520,10 +516,6 @@
           return text.length > len ? text.substring(0, len) + '…' : text;
         };
         
-        const attachmentText = truncate(r['Attachment'] || '', 15);
-        const subjectText = truncate(r['Email Subject'] || '', 30);
-        const contentText = truncate(r['Email Content'] || '', 40);
-        
         return `
         <tr id="row-${i}" class="${rowClass}">
           <td><input type="checkbox" class="row-check" data-idx="${i}" ${checked} /></td>
@@ -532,9 +524,7 @@
           <td>${esc(r['Attn'])}</td>
           <td>${esc(r['E-mail'])}</td>
           <td>${esc(r['Email CC'])}</td>
-          <td>${attachmentText}</td>
-          <td>${subjectText}</td>
-          <td>${contentText}</td>
+          <td>${esc(r['Email BCC'] || '')}</td>
           <td id="status-${i}">
             <span class="status-badge ${statusClass}">${statusText}</span>
           </td>
@@ -584,7 +574,8 @@
             ['Attn', r['Attn']],
             ['E-mail', r['E-mail']],
             ['Email CC', r['Email CC']],
-            ['Attachment', r['Attachment']],
+            ['Email BCC', r['Email BCC'] || ''],
+            ['Attachment', r['Attachment'] || ''],
           ];
           const rows_html = fields.map(([k, v], idx) => `
             <div style="display:flex;border-bottom:1px solid #f0f0f0;background:${idx%2?'#f7f7f7':'#fff'};">
@@ -703,10 +694,19 @@
     document.getElementById('btn-send-test').addEventListener('click', () => sendAll('test'));
     document.getElementById('btn-send-official').addEventListener('click', () => sendAll('official'));
 
+    function canSelectRow(i) {
+      if (rowErrors[i].length > 0) return false;
+      const ignoreAtt = document.getElementById('ignore-attachment').checked;
+      if (!ignoreAtt) {
+        const att = (rows[i]['Attachment'] || '').trim();
+        if (att && !uploadedAttachments.has(att)) return false;
+      }
+      return true;
+    }
+
     document.getElementById('btn-select-all').addEventListener('click', () => {
-      rowChecked = rowChecked.map(() => true);
-      document.querySelectorAll('.row-check').forEach(cb => cb.checked = true);
-      document.getElementById('check-all').checked = true;
+      rowChecked = rows.map((_, i) => canSelectRow(i));
+      renderTable();
       updateStats();
     });
 
@@ -718,8 +718,25 @@
     });
 
     document.getElementById('check-all').addEventListener('change', e => {
-      rowChecked = rowChecked.map(() => e.target.checked);
-      document.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
+      if (e.target.checked) {
+        rowChecked = rows.map((_, i) => canSelectRow(i));
+      } else {
+        rowChecked = rowChecked.map(() => false);
+      }
+      renderTable();
+      updateStats();
+    });
+
+    document.getElementById('ignore-attachment').addEventListener('change', () => {
+      const ignoreAtt = document.getElementById('ignore-attachment').checked;
+      rows.forEach((r, i) => {
+        if (rowErrors[i].length > 0) return;
+        const att = (r['Attachment'] || '').trim();
+        if (att && !uploadedAttachments.has(att)) {
+          rowChecked[i] = ignoreAtt;
+        }
+      });
+      renderTable();
       updateStats();
     });
 

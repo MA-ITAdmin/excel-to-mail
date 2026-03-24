@@ -37,12 +37,16 @@ def send_email(
     subject: str,
     body: str,
     attachment_path: Optional[Path] = None,
+    bcc_addrs: list[str] = None,
 ) -> None:
+    bcc_addrs = bcc_addrs or []
     msg = MIMEMultipart()
     msg["From"] = from_addr
     msg["To"] = ", ".join(to_addrs)
     if cc_addrs:
         msg["Cc"] = ", ".join(cc_addrs)
+    if bcc_addrs:
+        msg["Bcc"] = ", ".join(bcc_addrs)
     msg["Subject"] = subject
 
     # Support HTML content
@@ -63,7 +67,7 @@ def send_email(
         )
         msg.attach(part)
 
-    all_recipients = to_addrs + cc_addrs
+    all_recipients = to_addrs + cc_addrs + bcc_addrs
 
     # smtp_tls="starttls" → SMTP + STARTTLS
     # smtp_tls="ssl"      → SMTP_SSL
