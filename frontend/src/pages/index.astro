@@ -374,7 +374,7 @@
   <div id="toast"></div>
 
   <script>
-    const API = 'http://localhost:8000';
+    const API = import.meta.env.PUBLIC_API_URL || '';
     let sessionId = null;
     let rows = [];
     let rowStatuses = [];

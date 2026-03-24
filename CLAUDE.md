@@ -101,4 +101,4 @@ Backend: `fastapi`, `uvicorn`, `openpyxl`, `python-multipart`, `python-dotenv` (
 
 Frontend: Astro 6 with no framework components; all logic is vanilla JS in `index.astro`
 
-The frontend JS hardcodes `const API = 'http://localhost:8000'` — change this for production.
+The frontend reads `PUBLIC_API_URL` env var for the backend address (defaults to `''` = relative path). In Docker production, nginx proxies `/api/` to the backend container so no env var is needed. For local dev, set `PUBLIC_API_URL=http://localhost:8000` in `frontend/.env`.
