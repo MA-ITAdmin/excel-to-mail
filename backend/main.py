@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from database import get_db, init_db
+from database import cleanup_old_sessions, delete_session, get_db, init_db
 from email_service import render_template, send_email, split_emails
 
 ATTACHMENTS_BASE_DIR = Path(__file__).parent.parent / "attachments"
@@ -35,6 +35,9 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+    deleted = cleanup_old_sessions(days=7)
+    if deleted:
+        print(f"[cleanup] 已清除 {len(deleted)} 個舊 session：{deleted}")
 
 
 def get_smtp_config():
@@ -364,6 +367,21 @@ def get_logs(session_id: int):
     ).fetchall()
     conn.close()
     return {"logs": [dict(r) for r in logs]}
+
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session_endpoint(session_id: int):
+    conn = get_db()
+    exists = conn.execute(
+        "SELECT id FROM upload_sessions WHERE id = ?", (session_id,)
+    ).fetchone()
+    if not exists:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Session 不存在")
+    delete_session(conn, session_id)
+    conn.commit()
+    conn.close()
+    return {"deleted": session_id}
 
 
 @app.get("/api/config")

@@ -1,5 +1,6 @@
 import sqlite3
 import json
+import shutil
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent.parent / "data" / "sendmail.db"
@@ -40,3 +41,30 @@ def init_db():
     """)
     conn.commit()
     conn.close()
+
+
+ATTACHMENTS_BASE_DIR = Path(__file__).parent.parent / "attachments"
+
+
+def delete_session(conn, session_id: int) -> None:
+    """Delete a session and its send logs. Does NOT close the connection."""
+    conn.execute("DELETE FROM send_logs WHERE session_id = ?", (session_id,))
+    conn.execute("DELETE FROM upload_sessions WHERE id = ?", (session_id,))
+    session_dir = ATTACHMENTS_BASE_DIR / str(session_id)
+    if session_dir.exists():
+        shutil.rmtree(session_dir)
+
+
+def cleanup_old_sessions(days: int = 7) -> list[int]:
+    """Delete sessions older than `days` days. Returns list of deleted session IDs."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id FROM upload_sessions WHERE uploaded_at < datetime('now', 'localtime', ?)",
+        (f"-{days} days",),
+    ).fetchall()
+    deleted = [r["id"] for r in rows]
+    for sid in deleted:
+        delete_session(conn, sid)
+    conn.commit()
+    conn.close()
+    return deleted

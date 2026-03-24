@@ -745,6 +745,14 @@
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Clean up current session when leaving the page
+    function deleteCurrentSession() {
+      if (!sessionId) return;
+      fetch(`${API}/api/sessions/${sessionId}`, { method: 'DELETE', keepalive: true });
+      sessionId = null;
+    }
+    window.addEventListener('pagehide', deleteCurrentSession);
+
 </script>
 </body>
 </html>

@@ -8,18 +8,29 @@ OPR SendMail is a bulk email sender that reads recipient data from an Excel file
 
 ## Running the App
 
-**Backend** (from repo root):
+**All-in-one local dev** (from repo root — starts backend, frontend, and Mailpit via Docker):
+```bash
+./start.sh
+# Backend: http://localhost:8000, Frontend: http://localhost:4321, Mailpit: http://localhost:8025
+```
+
+**Backend only** (from repo root):
 ```bash
 source venv/bin/activate
 cd backend
 uvicorn main:app --reload
-# Runs at http://localhost:8000
 ```
 
-**Frontend** (from `frontend/`):
+**Frontend only** (from `frontend/`):
 ```bash
 npm run dev
-# Runs at http://localhost:4321
+```
+
+**Production (Docker)**:
+```bash
+./sendmail.sh start    # builds and starts all containers at http://localhost:8080
+./sendmail.sh stop
+./sendmail.sh logs
 ```
 
 ## Environment Setup
@@ -61,6 +72,28 @@ Key env vars:
 The backend handles Excel formulas — `resolve_cell()` in `main.py` evaluates `=` formulas and `"text"&B2` style concatenations using `eval_concat()`.
 
 **Test vs Official send:** Test mode routes all emails through Mailpit (port 1025 SMTP, port 8025 Web UI) for local interception — emails are never delivered to real recipients. Official mode uses `.env` SMTP config. CC is suppressed in test mode.
+
+## API Endpoints
+
+- `POST /api/upload` — parse Excel, create session
+- `GET /api/attachments/{session_id}` — list uploaded attachments
+- `POST /api/attachments/{session_id}` — upload attachment files
+- `POST /api/send` — send single row (`SendRequest`: `session_id`, `row_index`, `send_type`)
+- `POST /api/send-all` — send all rows (`SendAllRequest`: `session_id`, `send_type`)
+- `GET /api/logs/{session_id}` — fetch send history for a session
+- `GET /api/config` — non-sensitive config (smtp_host, smtp_from, test_email)
+- `GET /api/example` — download `example.xlsx` template
+
+CORS is configured for `localhost:4321` (dev frontend) and `localhost:8080` (Docker frontend).
+
+## Task Completion Notifications
+
+A macOS desktop notification hook exists at the repo root:
+```bash
+python3 notify.py "Title" "Description"
+./task_complete.sh "Description"
+```
+Notifications are logged to `notification.log`. Only works on macOS (requires Terminal notification permission).
 
 ## Dependencies
 
