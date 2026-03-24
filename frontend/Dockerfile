@@ -5,6 +5,8 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 
 COPY frontend/ ./
+ARG PUBLIC_MAILPIT_URL
+ENV PUBLIC_MAILPIT_URL=$PUBLIC_MAILPIT_URL
 RUN npm run build
 
 FROM nginx:alpine

@@ -275,7 +275,7 @@
     <div class="card">
       <h2>上傳 Excel</h2>
       <div style="margin-bottom:12px;">
-        <a href="http://localhost:8000/api/example" download class="btn btn-outline btn-sm">⬇ 下載範例 Excel</a>
+        <a id="example-link" href="/api/example" download class="btn btn-outline btn-sm">⬇ 下載範例 Excel</a>
       </div>
       <div class="upload-zone" id="upload-zone">
         <div class="icon">📂</div>
@@ -301,7 +301,7 @@
       <h2>設定</h2>
       <p style="font-size:0.88rem;color:#555;">發測試信時，信件會透過 <strong>Mailpit</strong> 攔截，不會寄出至真實收件人。</p>
       <div style="margin-top:12px;">
-        <a href="https://excel-mailpit.automodules.com/" target="_blank" class="btn btn-outline btn-sm">📬 開啟 Mailpit 查看測試信件</a>
+        <a id="mailpit-link" href="#" target="_blank" class="btn btn-outline btn-sm">📬 開啟 Mailpit 查看測試信件</a>
       </div>
     </div>
 
@@ -375,6 +375,9 @@
 
   <script>
     const API = import.meta.env.PUBLIC_API_URL || '';
+    const MAILPIT = import.meta.env.PUBLIC_MAILPIT_URL || 'https://excel-mailpit.automodules.com/';
+    document.getElementById('example-link').href = `${API}/api/example`;
+    document.getElementById('mailpit-link').href = MAILPIT;
     let sessionId = null;
     let rows = [];
     let rowStatuses = [];
